@@ -12,10 +12,11 @@ class Azu(Entity):
     _base_image = None
     knowledge = {}
 
-    def __init__(self, name: str, x_pos: int, y_pos: int, map_dimension: tuple[int, int]) -> None:
+    def __init__(self, name: str, x_pos: int, y_pos: int,
+                 map_dimension: tuple[int, int]) -> None:
         # Agent Brain
         self.type: str = "Azu"
-        self.actions = ["UP", "DOWN", "LEFT", "RIGHT", "IDLE"]
+        self.actions = ["UP", "DOWN", "LEFT", "RIGHT", "IDLE", "ATTACK"]
         super().__init__(name, x_pos, y_pos,
                          map_dimension, self.type, self.actions)
 
@@ -31,9 +32,14 @@ class Azu(Entity):
         self.hunger: int = random.randint(0, 30)
 
         # Prey
+        # ...................................... #
         self.damage_dealt_deer = 0
         self.closest_deer: object = None
         self.target_dir: int = 0
+
+        # Binary, 0 or 1 to feed it to the state function
+        self.is_deer_in_range: int = 0
+        # ...................................... #
 
         # Monster
         self.closest_monster: object = None
@@ -54,7 +60,8 @@ class Azu(Entity):
             self.die(self, ui)
             reward: float = -100
             if self.last_state is not None:
-                terminal_state: tuple[str, str] = ("DEAD", "DEAD")
+                terminal_state: tuple[str, ...] = (
+                    "DEAD" for _ in range(len(self.actions)))
                 self.brain.learn(
                     self.last_state, self.last_action, reward, terminal_state)
             return
@@ -76,20 +83,25 @@ class Azu(Entity):
         init_dist_deer = init_dist_monster = float('inf')
         if self.closest_deer:
             init_dist_deer = self.pos.distance_to(self.closest_deer.pos)
+        else:
+            # Is not close enought to attack
+            self.is_deer_in_range = 0
+
         if self.closest_monster:
             init_dist_monster = self.pos.distance_to(self.closest_monster.pos)
 
         # Brain execution
-        self._execute_movement(action_idx, dt)
+        reward: float = self._execute_movement(action_idx, dt)
 
-        self.manage_reward(current_state, action_idx, dt,
-                           init_dist_monster, init_dist_deer)
+        self.manage_reward(current_state, action_idx, dt, init_dist_monster,
+                           init_dist_deer, reward)
 
     def manage_reward(self, current_state: tuple, action_idx: int, dt: float,
-                      init_dist_monster: float, init_dist_deer: float) -> None:
+                      init_dist_monster: float, init_dist_deer: float,
+                      reward: float) -> None:
         # ------------------------------------------------------------------ #
         # Alive reward (avoid depression)
-        reward: float = 0.1
+        reward += 0.2
 
         # Hunger penalty
         if self.hunger >= 50:
@@ -98,6 +110,10 @@ class Azu(Entity):
         # Energy penalty
         if self.act_energy <= 0:
             reward -= 1
+
+        # Health penalty
+        if self.health <= self.max_health // 2:
+            reward -= 0.1
 
         # ENTITY BASED REWARDS
         # - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -122,9 +138,13 @@ class Azu(Entity):
 
             # Face-to-face deer reward
             if act_dist_deer <= 15:
-                reward += 10
+                reward += 7
                 self.hunger -= dt * 2
                 self.hunger = max(self.hunger, 0)
+
+                self.is_deer_in_range = 1
+            else:
+                self.is_deer_in_range = 0
 
         # Monster based rewards
         if self.closest_monster:
@@ -159,6 +179,7 @@ class Azu(Entity):
         screen.blit(Azu._base_image, self.pos -
                     pygame.Vector2(self.radius, self.radius))
 
+    # XXX: This function needs to be changed, it shouldnt return a value
     def _execute_movement(self, action_idx: int, dt: float) -> None:
         """
         Translates the action index into physical movement.
@@ -168,6 +189,7 @@ class Azu(Entity):
             dt: Delta time for frame-independent movement.
         """
         direction: pygame.Vector2 = pygame.Vector2(0, 0)
+        reward: float = 0
 
         if action_idx == 0:
             direction.y = -1
@@ -177,8 +199,19 @@ class Azu(Entity):
             direction.x = -1
         elif action_idx == 3:
             direction.x = 1
-        else:
-            pass
+        elif action_idx == 5:  # Attack
+            if self.act_energy > 10:
+                reward -= 1  # XXX: Shouldnt be here
+                self.act_energy -= 10 * dt
+                if self.is_deer_in_range == 1:
+                    try:
+                        self.closest_deer.receive_dmg(self.damage, dt)
+                    except AttributeError as e:
+                        print("-----------------------")
+                        print(e)
+                        print(self.get_info())
+                        exit(0)
+                    reward += 10  # XXX: This shouldnt be here
 
         if direction.length_squared() > 0:
             direction = direction.normalize()
@@ -201,6 +234,8 @@ class Azu(Entity):
         # Manage border positions
         self.pos.x = max(margin, min(self.pos.x, self.map_width - margin))
         self.pos.y = max(margin, min(self.pos.y, self.map_height - margin))
+
+        return reward
 
     def set_hunger(self, hunger: int) -> None:
         self.hunger = hunger
@@ -225,6 +260,7 @@ class Azu(Entity):
         at_bottom: int = 1 if self.y > self.map_height - 5 else 0
 
         low_energy: int = 1 if self.act_energy > self.max_energy // 2 else 0
+        low_health: int = 1 if self.health > self.max_health // 2 else 0
 
         hunger_status: int = 1 if self.hunger > 50 else 0
 
@@ -232,13 +268,6 @@ class Azu(Entity):
                 at_bottom, at_top, low_energy, self.target_dir, self.monster_dir)
 
     # Events
-
-    def _attack(self, closest_entity: object, dt: float):
-        if (closest_entity.get_pos() - self.pos).length_squared() < 25:
-            closest_entity.receive_damage(self.damage*dt)
-
-        if object.type == "Deer":
-            self.deer_damage += self.damage*dt
 
     def _balance_energy(self, dt: float) -> int:
         # Get health if not hungry
@@ -248,7 +277,7 @@ class Azu(Entity):
             self.health = min(self.health, self.max_health)
         else:
             self.hunger = max(self.hunger, 100)
-            # self.health -= dt
+            self.health -= dt
 
     def restart(self) -> None:
         self.alive = True
@@ -276,6 +305,7 @@ class Azu(Entity):
         Closest Deer : {self.closest_deer}
         Closest Monster : {self.closest_monster}
         Last Action : {self.last_action}
+        Is Deer in Range : {self.is_deer_in_range}
         ------------------
         Top Reward : {self.top_reward}
 

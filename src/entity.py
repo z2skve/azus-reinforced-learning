@@ -83,8 +83,8 @@ class Entity(ABC):
         return self.health
 
     # Events
-    def receive_damage(self, damage: int) -> None:
-        self.health -= damage
+    def receive_dmg(self, damage: int, dt: float) -> None:
+        self.health -= damage * dt
         if self.health <= 0:
             self.alive = False
 

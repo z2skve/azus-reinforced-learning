@@ -6,6 +6,7 @@ import sys
 from graphics import UI
 import pygame
 import random
+import os
 
 from azu import Azu
 from deer import Deer
@@ -28,8 +29,14 @@ def main():
     # Control Variable
     running: bool = True
 
+    # Create folder
+    folder = "azus-brain"
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     # Entities Knowledge
-    azu_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
+    # -------------------------------------------------------------- #
+    azu_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4, 5])
     azu_master_brain.load_from_disk(r"azus-brain/azu_knowledge.json")
 
     deer_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
@@ -37,6 +44,7 @@ def main():
 
     monster_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
     monster_master_brain.load_from_disk(r"azus-brain/monster_knowledge.json")
+    # -------------------------------------------------------------- #
 
     # Entities and Brains
     # ------------------------------------------------------------- #
@@ -63,7 +71,7 @@ def main():
     #
     # Start simulation
     while running:
-        dt = clock.tick(60) / 20
+        dt = clock.tick(60) / 10
         print("PT", dt)
 
         # Reduce Random Learning each Frame

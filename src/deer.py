@@ -66,9 +66,10 @@ class Deer(Entity):
             self.die(self, ui)
             reward: float = -100
             if self.last_state is not None:
-                terminal_state: tuple[str, str] = ("DEAD", "DEAD")
-                self.brain.learn(
-                    self.last_state, self.last_action, reward, terminal_state)
+                terminal_state: tuple[str, ...] = (
+                    "DEAD" for _ in range(len(self.actions)))
+                self.brain.learn(self.last_state, self.last_action,
+                                 reward, terminal_state)
             return
 
         # Change cell
@@ -109,7 +110,7 @@ class Deer(Entity):
 
             act_dist_azu = self.pos.distance_to(azu_pos)
 
-            if act_dist_azu < init_dist_azu:
+            if act_dist_azu > init_dist_azu:
                 reward += 4
             else:
                 reward -= 0.5
