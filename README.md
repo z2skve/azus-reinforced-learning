@@ -2,6 +2,7 @@
 
 Multi-agent RL simulation exploring the interaction between 3 distinct agent types. Built with Python, Pygame, and Q-Learning to observe survival dynamics, resource competition, and emergent decision-making in a shared environment.
 
+
 ![Reinforcement Learning Simulation](pictures/ReinforcedLearning.jpg)
 
 ## Overview
@@ -10,6 +11,8 @@ This project simulates the coexistence of three distinct entities in a shared en
 - **Azus** (blue dots) - A tribe that learns through reinforcement learning
 - **Deer** (yellow dots) - Resource entities
 - **Monsters** (red dots) - Hostile entities
+
+![Reinforcement Learning Simulation](pictures/cap1.png)
 
 The simulation uses **Q-Learning** with the **Bellman equation** to train Azus agents to survive and make optimal decisions based on their environment. Training progress is automatically saved to the `azus-brain/` directory, allowing the simulation to resume from where it left off.
 

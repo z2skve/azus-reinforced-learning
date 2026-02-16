@@ -79,7 +79,7 @@ def main():
     # Start simulation
     try:
         while running:
-            dt = clock.tick(60) / 10
+            dt = clock.tick(60) / 20
             print("PT", dt)
 
             # Reduce Random Learning each Frame
