@@ -3,17 +3,12 @@ import json
 import os
 
 
-import random
-import json
-import os
-
-
 class QLearningBrain:
     """
     Handles the Q-Learning logic and memory for an autonomous agent.
     """
 
-    def __init__(self, actions, learning_rate=0.1, discount_factor=0.9):
+    def __init__(self, actions, learning_rate=0.1, discount_factor=0.95):
         self.actions = actions
         self.lr = learning_rate
         self.gamma = discount_factor
@@ -24,12 +19,20 @@ class QLearningBrain:
 
     def get_q_values(self, state: tuple) -> list:
         """Retrieves or initializes Q-values for a given state."""
+
+        import types
+
+        if isinstance(state, types.GeneratorType):
+            print("¡Cuidado! Es un generador. Convirtiendo a tupla...")
+            exit(0)
+
         if state not in self.q_table:
             self.q_table[state] = [0.0] * len(self.actions)
         return self.q_table[state]
 
     def choose_action(self, state: tuple) -> int:
         """Selects an action index using an epsilon-greedy strategy."""
+
         if random.random() < self.epsilon:
             return random.randint(0, len(self.actions) - 1)
 
@@ -38,6 +41,7 @@ class QLearningBrain:
 
     def learn(self, state: tuple, action: int, reward: float, next_state: tuple) -> None:
         """Updates the Q-table using the Bellman equation."""
+
         q_values = self.get_q_values(state)
         next_q_values = self.get_q_values(next_state)
 

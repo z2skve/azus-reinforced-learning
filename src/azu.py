@@ -11,18 +11,25 @@ from entity import Entity
 class Azu(Entity):
     _base_image = None
     knowledge = {}
+    INF = float("inf")
 
     def __init__(self, name: str, x_pos: int, y_pos: int,
-                 map_dimension: tuple[int, int]) -> None:
+                 map_dimension: tuple[int, int], num_grids: int) -> None:
         # Agent Brain
         self.type: str = "Azu"
         self.actions = ["UP", "DOWN", "LEFT", "RIGHT", "IDLE", "ATTACK"]
         super().__init__(name, x_pos, y_pos,
-                         map_dimension, self.type, self.actions)
+                         map_dimension, num_grids, self.type, self.actions)
 
         # Knowledge
         self.brain.q_table: dict = Azu.knowledge
-        self.top_reward: float = 0
+
+        # Rewards
+        self.reward: int = 0
+
+        # Visited Cells
+        self.visited_cells = [0 for _ in range(
+            self.map_grids * self.map_grids)]
 
         # Adrenaline
         self.max_adrenaline: int = self.max_energy * 2
@@ -45,6 +52,12 @@ class Azu(Entity):
         self.closest_monster: object = None
         self.monster_dir: int = 0
 
+        # Attack
+        self.can_attack: int = 1
+
+        # Explore
+        self.closest_unknown: int = 0
+
         # Load base image
         if Azu._base_image is None:
             Azu._base_image = pygame.Surface(
@@ -55,15 +68,18 @@ class Azu(Entity):
     def update(self, ui: object, dt: float, screen: pygame.Surface) -> None:
         new_cell = ui.get_cell_at_pos(self.pos)
 
+        # Set Reward to 0
+        self.reward = 0
+
         # Entity die
         if self.health <= 0:
             self.die(self, ui)
-            reward: float = -100
+            self.reward -= 100
             if self.last_state is not None:
-                terminal_state: tuple[str, ...] = (
+                terminal_state: tuple[str, ...] = tuple(
                     "DEAD" for _ in range(len(self.actions)))
                 self.brain.learn(
-                    self.last_state, self.last_action, reward, terminal_state)
+                    self.last_state, self.last_action, self.reward, terminal_state)
             return
 
         # Change cell
@@ -73,6 +89,13 @@ class Azu(Entity):
 
             new_cell.add_entity(self)
             self.current_cell = new_cell
+
+            # Exploration management
+            self.closest_unknown = self.get_unexplored()
+
+        # Energy management
+        self._balance_energy(dt)
+        self.can_attack = 1 if self.act_energy >= 10 else 0
 
         # Brain decision
         neighbors = ui.get_neighbors(self, self.current_cell, self.radius)
@@ -84,36 +107,103 @@ class Azu(Entity):
         if self.closest_deer:
             init_dist_deer = self.pos.distance_to(self.closest_deer.pos)
         else:
-            # Is not close enought to attack
+            # Is close enought to attack
             self.is_deer_in_range = 0
+            self.target_dir = 0
 
         if self.closest_monster:
             init_dist_monster = self.pos.distance_to(self.closest_monster.pos)
 
         # Brain execution
-        reward: float = self._execute_movement(action_idx, dt)
+        self._execute_movement(action_idx, dt)
 
-        self.manage_reward(current_state, action_idx, dt, init_dist_monster,
-                           init_dist_deer, reward)
+        # Manage rewards
+        self.misc_rewards(current_state, action_idx, dt, init_dist_monster,
+                          init_dist_deer)
 
-    def manage_reward(self, current_state: tuple, action_idx: int, dt: float,
-                      init_dist_monster: float, init_dist_deer: float,
-                      reward: float) -> None:
+        # Learn
+        if self.last_state is not None:
+            self.brain.learn(self.last_state, self.last_action,
+                             self.reward, current_state)
+
+        # Update state variables
+        self.last_state = current_state
+        self.last_action = action_idx
+
+    def _explore_reward(self, cell_value: int) -> None:
+        avrg: float = sum(self.visited_cells) / len(self.visited_cells) + 1
+
+        # Formula attempt not working
+        # cell_max = max(min(((avrg / (cell_value + 1)) *
+        # (avrg - cell_value) / 2) + 1 / 2, 5), -0.2)
+
+        # Formula did work
+        cell_max = max(min(-0.2 * (cell_value - avrg)**3 + 1, 5), -1)
+        self.reward += cell_max
+
+    def get_unexplored(self) -> int:
+        """
+        Returns the direction of the least visited surrounding cell
+        """
+        cell_x, cell_y = self.current_cell.get_pos()
+        cell_position = cell_y * self.map_grids + cell_x
+
+        self._explore_reward(self.visited_cells[cell_position])
+
+        self.visited_cells[cell_position] += 1
+
+        #                 ~ Top ~ Right ~ Bottom ~ Left ~
+        around_cells = [Azu.INF, Azu.INF, Azu.INF, Azu.INF]
+        if cell_y != 0:
+            top = cell_position - self.map_grids
+            top_cell_val = self.visited_cells[top]
+            around_cells[0] = top_cell_val
+        if cell_x != self.map_grids - 1:
+            right = cell_position + 1
+            right_cell_val = self.visited_cells[right]
+            around_cells[1] = right_cell_val
+        if cell_y != self.map_grids - 1:
+            bottom = cell_position + self.map_grids
+            bottom_cell_val = self.visited_cells[bottom]
+            around_cells[2] = bottom_cell_val
+        if cell_x != 0:
+            left = cell_position - 1
+            left_cell_val = self.visited_cells[left]
+            around_cells[3] = left_cell_val
+
+        min_value = min(around_cells)
+        least_visited_cells = [i for i, val in enumerate(
+            around_cells) if val == min_value]
+
+        return random.choice(least_visited_cells)
+
+    def misc_rewards(self, current_state: tuple, action_idx: int, dt: float,
+                     init_dist_monster: float, init_dist_deer: float) -> None:
         # ------------------------------------------------------------------ #
         # Alive reward (avoid depression)
-        reward += 0.2
+        self.reward += 0.1
+
+        # Action penalty
+        if action_idx < 4:
+            self.reward -= 0.05
+        elif action_idx == 5 and self.can_attack == 1:  # Attack
+            self.reward -= 1
+
+            # Attack successful reward
+            if self.is_deer_in_range == 1:
+                self.reward += 11
 
         # Hunger penalty
         if self.hunger >= 50:
-            reward -= 0.05
+            self.reward -= 0.05
 
         # Energy penalty
         if self.act_energy <= 0:
-            reward -= 1
+            self.reward -= 1
 
         # Health penalty
         if self.health <= self.max_health // 2:
-            reward -= 0.1
+            self.reward -= 0.1
 
         # ENTITY BASED REWARDS
         # - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -132,13 +222,13 @@ class Azu(Entity):
 
             # Closer to deer reward
             if act_dist_deer < init_dist_deer:
-                reward += 1.5
+                self.reward += 1.5
             else:
-                reward -= 0.5
+                self.reward -= 0.5
 
             # Face-to-face deer reward
             if act_dist_deer <= 15:
-                reward += 7
+                self.reward += 7
                 self.hunger -= dt * 2
                 self.hunger = max(self.hunger, 0)
 
@@ -160,26 +250,16 @@ class Azu(Entity):
             # Closer to monster penalty
             act_dist_monster = self.pos.distance_to(self.closest_monster.pos)
             if act_dist_monster > init_dist_monster:
-                reward += 1.5
+                self.reward += 1.5
             else:
-                reward -= 2
+                self.reward -= 2
         # - - - - - - - - - - - - - - - - - - - - - - - - -
-
-        if self.last_state is not None:
-            self.brain.learn(self.last_state, self.last_action,
-                             reward, current_state)
-
-        self.last_state = current_state
-        self.last_action = action_idx
-
-        self.top_reward = max(self.top_reward, reward)
         # ------------------------------------------------------------------ #
 
     def draw(self, screen: pygame.Surface) -> None:
         screen.blit(Azu._base_image, self.pos -
                     pygame.Vector2(self.radius, self.radius))
 
-    # XXX: This function needs to be changed, it shouldnt return a value
     def _execute_movement(self, action_idx: int, dt: float) -> None:
         """
         Translates the action index into physical movement.
@@ -189,29 +269,27 @@ class Azu(Entity):
             dt: Delta time for frame-independent movement.
         """
         direction: pygame.Vector2 = pygame.Vector2(0, 0)
-        reward: float = 0
 
+        # Clockwise
         if action_idx == 0:
             direction.y = -1
         elif action_idx == 1:
-            direction.y = 1
-        elif action_idx == 2:
-            direction.x = -1
-        elif action_idx == 3:
             direction.x = 1
-        elif action_idx == 5:  # Attack
-            if self.act_energy > 10:
-                reward -= 1  # XXX: Shouldnt be here
+        elif action_idx == 2:
+            direction.y = 1
+        elif action_idx == 3:
+            direction.x = -1
+
+        # IDLE
+        elif action_idx == 4:
+            pass
+        # Attack
+        elif action_idx == 5:
+            if self.can_attack == 1:
                 self.act_energy -= 10 * dt
                 if self.is_deer_in_range == 1:
-                    try:
-                        self.closest_deer.receive_dmg(self.damage, dt)
-                    except AttributeError as e:
-                        print("-----------------------")
-                        print(e)
-                        print(self.get_info())
-                        exit(0)
-                    reward += 10  # XXX: This shouldnt be here
+                    # self.closest_deer.receive_dmg(self.damage, dt)
+                    pass
 
         if direction.length_squared() > 0:
             direction = direction.normalize()
@@ -234,8 +312,6 @@ class Azu(Entity):
         # Manage border positions
         self.pos.x = max(margin, min(self.pos.x, self.map_width - margin))
         self.pos.y = max(margin, min(self.pos.y, self.map_height - margin))
-
-        return reward
 
     def set_hunger(self, hunger: int) -> None:
         self.hunger = hunger
@@ -260,21 +336,25 @@ class Azu(Entity):
         at_bottom: int = 1 if self.y > self.map_height - 5 else 0
 
         low_energy: int = 1 if self.act_energy > self.max_energy // 2 else 0
-        low_health: int = 1 if self.health > self.max_health // 2 else 0
+        # low_health: int = 1 if self.health > self.max_health // 2 else 0
 
         hunger_status: int = 1 if self.hunger > 50 else 0
 
         return (monster_near, deer_near, hunger_status, at_right, at_left,
-                at_bottom, at_top, low_energy, self.target_dir, self.monster_dir)
+                at_bottom, at_top, low_energy, self.target_dir, self.monster_dir,
+                self.is_deer_in_range, self.can_attack, self.closest_unknown)
 
     # Events
 
     def _balance_energy(self, dt: float) -> int:
         # Get health if not hungry
         if self.hunger < 100:
-            self.hunger += dt
-            self.health += dt
-            self.health = min(self.health, self.max_health)
+            if self.health < self.max_health:
+                self.hunger += dt
+                self.health += dt
+                self.health = min(self.health, self.max_health)
+            else:
+                self.hunger += dt * 0.3
         else:
             self.hunger = max(self.hunger, 100)
             self.health -= dt
@@ -307,6 +387,20 @@ class Azu(Entity):
         Last Action : {self.last_action}
         Is Deer in Range : {self.is_deer_in_range}
         ------------------
-        Top Reward : {self.top_reward}
+        {self.get_pos_draw()}
+        {self.reward}
 
+        Closest Unknown : {self.closest_unknown}
         """
+
+    def get_pos_draw(self) -> None:
+        x, y = self.current_cell.get_pos()
+        pos = y * 20 + x
+        for i, val in enumerate(self.visited_cells):
+            if i % 20 == 0:
+                print()
+            if pos == i:
+                print(" () ", end="")
+            else:
+                print(f"{val:^4}", end="")
+        print()

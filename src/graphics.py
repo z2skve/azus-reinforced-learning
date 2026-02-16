@@ -24,12 +24,12 @@ class Cell:
 
 
 class UI:
-    def __init__(self, title: str, bg_color: tuple[int, int, int], width: int = 1000, height: int = 1000) -> None:
+    def __init__(self, title: str, bg_color: tuple[int, int, int], width: int = 1000, height: int = 1000, num_grids: int = 20) -> None:
         pygame.init()
         self.bg_color: tuple[int, int, int] = bg_color
         self.width: int = width
         self.height: int = height
-        self.num_grids: int = 20
+        self.num_grids: int = num_grids
 
         self.title: str = title
 

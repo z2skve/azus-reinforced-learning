@@ -10,7 +10,7 @@ from entity import Entity
 class Monster(Entity):
     _base_image = None
 
-    def __init__(self, name: str, x_pos: int, y_pos: int, map_dimension: tuple[int, int]) -> None:
+    def __init__(self, name: str, x_pos: int, y_pos: int, map_dimension: tuple[int, int], num_grids: int) -> None:
         # Identifier
         self.name = name
         self.type = "Monster"
@@ -18,7 +18,7 @@ class Monster(Entity):
         # Agent Brain
         self.actions = ["UP", "DOWN", "LEFT", "RIGHT", "IDLE"]
         super().__init__(name, x_pos, y_pos,
-                         map_dimension, self.type, self.actions)
+                         map_dimension, num_grids, self.type, self.actions)
 
         # Position
         self.current_cell: object = None

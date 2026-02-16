@@ -6,8 +6,13 @@ import random
 
 class Entity(ABC):
 
-    def __init__(self, name: str, x_pos: int, y_pos: int, map_dimension: tuple[int, int], entity_type: str, actions: list) -> None:
+    def __init__(self, name: str, x_pos: int, y_pos: int,
+                 map_dimension: tuple[int, int], num_grids: int,
+                 entity_type: str, actions: list) -> None:
+
+        # Map
         self.map_width, self.map_height = map_dimension
+        self.map_grids: int = num_grids
 
         # Naming and Type
         self.name: str = name
