@@ -90,6 +90,7 @@ class Entity(ABC):
     # Events
     def receive_dmg(self, damage: int, dt: float) -> None:
         self.health -= damage * dt
+        self.reward -= 0.5
         if self.health <= 0:
             self.alive = False
 

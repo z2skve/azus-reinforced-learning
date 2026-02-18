@@ -23,7 +23,7 @@ class QLearningBrain:
         import types
 
         if isinstance(state, types.GeneratorType):
-            print("¡Cuidado! Es un generador. Convirtiendo a tupla...")
+            print("Generator detected... Stopping")
             exit(0)
 
         if state not in self.q_table:

@@ -40,7 +40,6 @@ class Azu(Entity):
 
         # Prey
         # ...................................... #
-        self.damage_dealt_deer = 0
         self.closest_deer: object = None
         self.target_dir: int = 0
 
@@ -74,7 +73,7 @@ class Azu(Entity):
         # Entity die
         if self.health <= 0:
             self.die(self, ui)
-            self.reward -= 100
+            self.reward -= 20
             if self.last_state is not None:
                 terminal_state: tuple[str, ...] = tuple(
                     "DEAD" for _ in range(len(self.actions)))
@@ -94,7 +93,7 @@ class Azu(Entity):
             self.closest_unknown = self.get_unexplored()
 
         # Energy management
-        self._balance_energy(dt)
+        self._balance_hunger(dt)
         self.can_attack = 1 if self.act_energy >= 10 else 0
 
         # Brain decision
@@ -228,7 +227,7 @@ class Azu(Entity):
 
             # Face-to-face deer reward
             if act_dist_deer <= 15:
-                self.reward += 7
+                self.reward += 5
                 self.hunger -= dt * 2
                 self.hunger = max(self.hunger, 0)
 
@@ -250,9 +249,10 @@ class Azu(Entity):
             # Closer to monster penalty
             act_dist_monster = self.pos.distance_to(self.closest_monster.pos)
             if act_dist_monster > init_dist_monster:
-                self.reward += 1.5
+                self.reward += 0.5
             else:
                 self.reward -= 2
+
         # - - - - - - - - - - - - - - - - - - - - - - - - -
         # ------------------------------------------------------------------ #
 
@@ -288,8 +288,7 @@ class Azu(Entity):
             if self.can_attack == 1:
                 self.act_energy -= 10 * dt
                 if self.is_deer_in_range == 1:
-                    # self.closest_deer.receive_dmg(self.damage, dt)
-                    pass
+                    self.closest_deer.receive_dmg(self.damage, dt)
 
         if direction.length_squared() > 0:
             direction = direction.normalize()
@@ -320,6 +319,9 @@ class Azu(Entity):
         self.deer_damage = 0
 
     # Getters
+    def get_reward(self) -> None:
+        return self.reward
+
     def _get_state(self, neighbors: tuple) -> tuple:
         """Converts environment data into a discrete state."""
 
@@ -335,7 +337,7 @@ class Azu(Entity):
         at_top: int = 1 if self.y < 5 else 0
         at_bottom: int = 1 if self.y > self.map_height - 5 else 0
 
-        low_energy: int = 1 if self.act_energy > self.max_energy // 2 else 0
+        low_energy: int = 1 if self.act_energy < self.max_energy // 2 else 0
         # low_health: int = 1 if self.health > self.max_health // 2 else 0
 
         hunger_status: int = 1 if self.hunger > 50 else 0
@@ -346,11 +348,11 @@ class Azu(Entity):
 
     # Events
 
-    def _balance_energy(self, dt: float) -> int:
+    def _balance_hunger(self, dt: float) -> int:
         # Get health if not hungry
         if self.hunger < 100:
             if self.health < self.max_health:
-                self.hunger += dt
+                self.hunger += dt / 4
                 self.health += dt
                 self.health = min(self.health, self.max_health)
             else:
@@ -375,6 +377,7 @@ class Azu(Entity):
         Hunger : {self.hunger}
         Actual Speed : {self.act_speed}
         Max Speed : {self.max_speed}
+        Acceleration : {self.acceleration}
         Actual Energy : {self.act_energy}
         Max Energy : {self.max_energy}
         Max Adrenaline : {self.max_adrenaline}
@@ -387,10 +390,7 @@ class Azu(Entity):
         Last Action : {self.last_action}
         Is Deer in Range : {self.is_deer_in_range}
         ------------------
-        {self.get_pos_draw()}
-        {self.reward}
-
-        Closest Unknown : {self.closest_unknown}
+        Closest Unexplored : {self.closest_unknown}
         """
 
     def get_pos_draw(self) -> None:

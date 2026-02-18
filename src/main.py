@@ -14,15 +14,22 @@ from monster import Monster
 
 from agent import QLearningBrain
 
+# Telemetry
+from datagraph import DataGraph
 
-def main():
+
+def get_avrg_stat(azus: list[object, ...]) -> float:
+    return sum(azu.get_reward() for azu in azus) / len(azus)
+
+
+def main() -> None:
     # Initialize pygame
     pygame.init()
     clock = pygame.time.Clock()
 
+    # Map config
     width: int = 1000
     height: int = 1000
-
     num_grids: int = 20
 
     # Verify dir existence
@@ -32,14 +39,13 @@ def main():
 
     # Create UI
     ui: UI = UI("Azus Simulation", (43, 42, 51), width, height, num_grids)
+    telemetry_mon: DataGraph = DataGraph(
+        "Time Survived DataGraph", "Time (s)", "Ticks Survived")
+
+    telemetry_mon.update(0, 0)
 
     # Control Variable
     running: bool = True
-
-    # Create folder
-    folder = "azus-brain"
-    if not os.path.exists(folder):
-        os.makedirs(folder)
 
     # Entities Knowledge
     # -------------------------------------------------------------- #
@@ -56,7 +62,9 @@ def main():
     # Entities and Brains
     # ------------------------------------------------------------- #
     azus:     list[Azu, ...] = [
-        Azu(f"{i}", random.randint(10, width - 10), random.randint(10, height - 10), (width, height), num_grids) for i in range(10)]
+        Azu(f"{i}", random.randint(10, width - 10),
+            random.randint(10, height - 10), (width, height), num_grids)
+        for i in range(100)]
 
     for azu in azus:
         azu.brain = azu_master_brain
@@ -68,19 +76,32 @@ def main():
         deer.brain = deer_master_brain
 
     monsters: list[Monster, ...] = [
-        Monster(f"{i}", random.randint(10, width - 10), random.randint(10, height - 10), (width, height), num_grids) for i in range(10)]
+        Monster(f"{i}", random.randint(10, width - 10),
+                random.randint(10, height - 10), (width, height), num_grids)
+        for i in range(1)]
 
     for monster in monsters:
         monster.brain = monster_master_brain
 
     entities: list[object, [...]] = [*azus, *deers, *monsters]
     # ------------------------------------------------------------- #
-    #
+
     # Start simulation
     try:
+        # Saves last tick refresh
+        last_graph_refresh: int = 0
+
         while running:
-            dt = clock.tick(60) / 20
-            print("PT", dt)
+            dt = clock.tick(100) / 10
+            ticks = pygame.time.get_ticks()
+
+            # Get Stats
+            avrg_reward = get_avrg_stat(azus)
+
+            # Update Graphs
+            if ticks - last_graph_refresh > 200 and False:  # Temporary
+                telemetry_mon.update(ticks / 1000, avrg_reward)
+                last_graph_refresh = ticks
 
             # Reduce Random Learning each Frame
             if azu_master_brain.epsilon > azu_master_brain.epsilon_min:
@@ -104,6 +125,10 @@ def main():
             deers_alive = any(isinstance(obj, Deer) for obj in entities)
 
             if not azus_alive:
+
+                telemetry_mon.update(ticks / 1000, ticks - last_graph_refresh)
+                last_graph_refresh = ticks
+
                 entities: list[object, [...]] = [*azus, *deers, *monsters]
                 for azu in azus:
                     azu.restart()
@@ -133,11 +158,16 @@ def main():
 
             ui.update_display()
 
+    except Exception as e:
+        print(e)
+        exit(0)
     # End pygame
     finally:
         azu_master_brain.save_to_disk(r"azus-brain/azu_knowledge.json")
         deer_master_brain.save_to_disk(r"azus-brain/deer_knowledge.json")
         monster_master_brain.save_to_disk(r"azus-brain/monster_knowledge.json")
+
+        telemetry_mon.close()
         pygame.quit()
         sys.exit()
 

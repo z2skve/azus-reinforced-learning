@@ -5,13 +5,14 @@
 import random
 import pygame
 
-from agent import QLearningBrain
 from entity import Entity
 
 
 class Deer(Entity):
     _base_image = None
     knowledge = {}
+
+    INF = float("inf")
 
     def __init__(self, name: str, x_pos: int, y_pos: int, map_dimension: tuple[int, int], num_grids: int) -> None:
         # Identifier
@@ -25,7 +26,9 @@ class Deer(Entity):
 
         # Knowledge
         self.brain.q_table: dict = Deer.knowledge
-        self.top_reward: float = 0
+
+        # Energy
+        self.max_energy = random.randint(80, 120)
 
         # Position
         self.current_cell: object = None
@@ -36,6 +39,7 @@ class Deer(Entity):
 
         # Hunter
         self.closest_azu: object = None
+        self.azu_too_close: int = 0
         self.azu_dir: int = 0
 
         # Load base image
@@ -64,12 +68,12 @@ class Deer(Entity):
         # Entity die
         if self.health <= 0:
             self.die(self, ui)
-            reward: float = -100
+            self.reward: float = -20
             if self.last_state is not None:
-                terminal_state: tuple[str, ...] = (
+                terminal_state: tuple[str, ...] = tuple(
                     "DEAD" for _ in range(len(self.actions)))
                 self.brain.learn(self.last_state, self.last_action,
-                                 reward, terminal_state)
+                                 self.reward, terminal_state)
             return
 
         # Change cell
@@ -80,25 +84,35 @@ class Deer(Entity):
             new_cell.add_entity(self)
             self.current_cell = new_cell
 
+        # Distance to prey
+        if self.closest_azu:
+            init_dist_azu = self.pos.distance_to(self.closest_azu.pos)
+            if init_dist_azu < 10:
+                self.azu_too_close = 1
+                self.reward -= 3
+        else:
+            init_dist_azu = Deer.INF
+
         # Brain decision
         neighbors = ui.get_neighbors(self, self.current_cell, self.radius)
         current_state = self._get_state(neighbors)
         action_idx = self.brain.choose_action(current_state)
 
-        # Distance to prey
-        if self.closest_azu:
-            init_dist_azu = self.pos.distance_to(self.closest_azu.pos)
-
         # Brain execution
         self._execute_movement(action_idx, dt)
 
         # Manage energy
-        self.act_energy = self._balance_energy(dt)
+        # self.act_energy = self._balance_energy(dt)
 
         # Reward management
         # ------------------------------------------------------------------ #
-        reward: float = 0.1
+        self.reward: float = 0.1
 
+        # Action penalty
+        if action_idx < 4:
+            self.reward -= 0.05
+
+        self.azu_too_close = 0
         if self.closest_azu:
             azu_pos = self.closest_azu.pos
             # Vector
@@ -111,18 +125,17 @@ class Deer(Entity):
             act_dist_azu = self.pos.distance_to(azu_pos)
 
             if act_dist_azu > init_dist_azu:
-                reward += 4
+                self.reward += 0.5
             else:
-                reward -= 0.5
+                self.reward -= 2
 
         if self.last_state is not None:
             self.brain.learn(self.last_state, self.last_action,
-                             reward, current_state)
+                             self.reward, current_state)
 
         self.last_state = current_state
         self.last_action = action_idx
 
-        self.top_reward = max(self.top_reward, reward)
         # ------------------------------------------------------------------ #
 
     def draw(self, screen: pygame.Surface) -> None:
@@ -139,26 +152,39 @@ class Deer(Entity):
         """
         direction: pygame.Vector2 = pygame.Vector2(0, 0)
 
+        # Clockwise
         if action_idx == 0:
             direction.y = -1
         elif action_idx == 1:
-            direction.y = 1
-        elif action_idx == 2:
-            direction.x = -1
-        elif action_idx == 3:
             direction.x = 1
-        else:
-            pass  # IDLE
+        elif action_idx == 2:
+            direction.y = 1
+        elif action_idx == 3:
+            direction.x = -1
 
-        # Normalize if needed
+        # IDLE
+        elif action_idx == 4:
+            pass
+
         if direction.length_squared() > 0:
             direction = direction.normalize()
 
         margin: int = 5
 
         speed_factor: float = (self.act_speed + self.acceleration * dt)
-        self.pos += direction * speed_factor
 
+        # Manage energy movement
+        if self.act_energy > 0:
+            self.pos += direction * speed_factor
+
+        # Manage energy consume
+        if direction != (0, 0):
+            self.act_energy -= dt * 1.5
+        else:
+            self.act_energy += 0.8 * dt
+        self.act_energy = max(0, min(self.max_energy, self.act_energy))
+
+        # Manage border positions
         self.pos.x = max(margin, min(self.pos.x, self.map_width - margin))
         self.pos.y = max(margin, min(self.pos.y, self.map_height - margin))
 
@@ -173,10 +199,10 @@ class Deer(Entity):
         at_top: int = 1 if self.y < 5 else 0
         at_bottom: int = 1 if self.y > self.map_height - 5 else 0
 
-        low_energy: int = 1 if self.act_energy > self.max_energy // 2 else 0
+        low_energy: int = 1 if self.act_energy < self.max_energy // 2 else 0
 
         return (azu_near, at_right, at_left,
-                at_bottom, at_top, low_energy, self.azu_dir)
+                at_bottom, at_top, low_energy, self.azu_dir, self.azu_too_close)
 
     def restart(self) -> None:
         self.alive = True
