@@ -39,7 +39,7 @@ class Entity(ABC):
 
         # Miscellaneous
         self.damage: int = random.randint(6, 18)
-        self.sight_range: int = random.randint(0, 100)
+        self.sight_range: int = random.randint(60, 100)
 
         # Draw options
         self.radius: int = 3

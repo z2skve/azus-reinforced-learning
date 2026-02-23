@@ -23,9 +23,12 @@ class Monster(Entity):
         # Position
         self.current_cell: object = None
 
+        # Speed
+        self.max_speed = random.randint(10, 18)
+        self.acceleration = random.randint(1, 3)
+
         # Miscellaneous
-        self.hunger: int = random.randint(0, 30)
-        self.closest_azu: tuple[int, int] = ()
+        self.sight_range: int = random.randint(70, 120)
 
         # Prey
         self.closest_azu: object = None
@@ -38,7 +41,7 @@ class Monster(Entity):
             pygame.draw.circle(Monster._base_image, (255, 0, 0),
                                (self.radius, self.radius), self.radius)
 
-    def update(self, ui: object, dt: float, screen: pygame.Surface) -> None:
+    def update(self, ui: object, dt: float) -> None:
         new_cell = ui.get_cell_at_pos(self.pos)
 
         # Entity die
@@ -76,9 +79,6 @@ class Monster(Entity):
         # Reward management
         # ------------------------------------------------------------------ #
         reward: float = 0.1
-
-        if self.hunger >= 50:
-            reward -= 0.05
 
         if self.closest_azu:
             azu_pos = self.closest_azu.pos
@@ -151,15 +151,14 @@ class Monster(Entity):
             "Azu", neighbors)[0]
         azu_near: int = 1 if self.closest_azu is not None else 0
 
-        at_right: int = 1 if self.x > self.map_width - 5 else 0
-        at_left: int = 1 if self.x < 5 else 0
-        at_top: int = 1 if self.y < 5 else 0
-        at_bottom: int = 1 if self.y > self.map_height - 5 else 0
-
-        low_energy: int = 1 if self.act_energy > self.max_energy // 2 else 0
+        tmp_margin = 7
+        at_right: int = 1 if self.x > self.map_width - tmp_margin else 0
+        at_left: int = 1 if self.x < tmp_margin else 0
+        at_top: int = 1 if self.y < tmp_margin else 0
+        at_bottom: int = 1 if self.y > self.map_height - tmp_margin else 0
 
         return (azu_near, at_right, at_left,
-                at_bottom, at_top, low_energy, self.target_dir)
+                at_bottom, at_top, self.target_dir)
 
     def _attack(self, closest_entity: object, dt: float):
         if (closest_entity.get_pos() - self.pos).length_squared() < 25:
@@ -168,33 +167,10 @@ class Monster(Entity):
         if object.type == "Azu":
             self.deer_damage += self.damage*dt
 
-    def _balance_energy(self, dt: float) -> int:
-        # Get health if not hungry
-        if self.hunger < 100:
-            self.hunger += dt
-            self.health += dt
-            self.health = min(self.health, self.max_health)
-        else:
-            self.hunger = max(self.hunger, 100)
-            # self.health -= dt
-
-        # XXX: Prob should adapt this behaviour
-        if self.act_speed > self.max_speed//5 and self.act_energy > 0:
-            self.act_energy -= self.act_speed//10 * dt
-            self.act_energy = max(self.act_energy, 0)
-
-        # If stopped gain energy
-        elif self.act_speed == 0 and self.act_energy < self.max_energy:
-            self.act_energy += 0.5
-            self.act_energy = min(self.max_energy, self.act_energy)
-
-        return self.act_energy
-
     def restart(self) -> None:
         self.alive = True
         self.health = self.max_health
         self.pos = pygame.Vector2(self.x, self.y)
-        self.hunger = 0
 
     def get_info(self) -> str:
         return f"""
@@ -203,7 +179,6 @@ class Monster(Entity):
         Health : {self.health}
         Max Health : {self.max_health}
         Alive: {self.alive}
-        Hunger : {self.hunger}
         Max Speed : {self.max_speed}
         Max Energy : {self.max_energy}
         Damage : {self.damage}

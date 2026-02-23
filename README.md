@@ -30,9 +30,33 @@ Where:
 - **γ** = discount factor
 - **s'** = next state
 
+
+## Evolutionary Strategy
+To optimize the reward signals and agent behavior, a Genetic Algorithm (GA) framework has been integrated.
+
+- Selection & Elitism: The system employs an elitist strategy, ensuring that the top two individuals from each generation are preserved unchanged. The remaining population is generated through the crossover of the Top-N performing entities.
+
+- Stochastic Noise Mitigation: To account for environmental randomness (spawn point luck), fitness is not calculated from a single run. Instead, each genome is evaluated across three independent trials. The final fitness score is the arithmetic mean of these trials.
+
+- Generational Epsilon Reset: To balance exploration and exploitation within each evolutionary step, the Epsilon parameter (ϵ) restarts at 30% at the beginning of each generation, decaying towards a minimum value as agents gain experience in their specific epoch.
+
+## Telemetry and Performance Monitoring
+
+A telemetry system has been implemented to track the evolutionary progress.
+
+>It also displays a cumulative learning slope using the least-squares method in order to identify whether the population is evolving toward higher efficiency or hitting a performance plateau.
+
+<p align="center">
+<img src="pictures/cap2.png" width="48%" />
+<img src="pictures/cap3.png" width="48%" />
+</p>
+<p align="center">
+<img src="pictures/cap4.png" width="48%" />
+</p>
+
 ## Exploration Feature
 
-One of the most interesting aspects of this implementation is the **exploration incentive system**. To encourage Azus agents to explore their environment rather than getting stuck in local optima, I designed a mechanism that:
+One of the most interesting aspects of this implementation is the **exploration incentive system**. To encourage Azus agents to explore their environment rather than getting stuck in local optima, the designed mechanism does:
 
 1. Tracks the visit frequency of each cell in the map
 2. Identifies the least-visited neighboring cell around each agent
@@ -41,14 +65,20 @@ One of the most interesting aspects of this implementation is the **exploration 
 
 The reward function for exploration is:
 
-**R(cell) = max(min(-0.2(v - μ)³ + 1, 5), -1)**
+```math
+R_{cell} = \text{clamp}\left(k \cdot \left(V_c - \bar{V}\right)^3 + \delta,\ W_{min},\ W_{max}\right)
+```
 
 Where:
-- **v** = visit count of the current cell
-- **μ** = average visit count across all cells
-- The reward is capped between -1 and 5
 
-
+> $V_c$ = visit count of the current cell.
+> 
+> $\bar{V}$ = average visit count across all cells in the grid.
+> 
+> $k$ = sensitivity slope (defines how aggressively the agent reacts to unexplored areas).
+> 
+> $\delta$ = reward offset (shifts the baseline of the exploration incentive).
+> 
 ## Features
 
 - **Console output** displaying Azu characteristics during simulation

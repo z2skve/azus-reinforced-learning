@@ -62,7 +62,7 @@ class Deer(Entity):
 
         return self.act_energy
 
-    def update(self, ui: object, dt: float, screen: pygame.Surface) -> None:
+    def update(self, ui: object, dt: float) -> None:
         new_cell = ui.get_cell_at_pos(self.pos)
 
         # Entity die
@@ -194,10 +194,11 @@ class Deer(Entity):
         self.closest_azu = self._check_for_entities("Azu", neighbors)[0]
         azu_near: int = 1 if self.closest_azu is not None else 0
 
-        at_right: int = 1 if self.x > self.map_width - 5 else 0
-        at_left: int = 1 if self.x < 5 else 0
-        at_top: int = 1 if self.y < 5 else 0
-        at_bottom: int = 1 if self.y > self.map_height - 5 else 0
+        tmp_margin = 7
+        at_right: int = 1 if self.x > self.map_width - tmp_margin else 0
+        at_left: int = 1 if self.x < tmp_margin else 0
+        at_top: int = 1 if self.y < tmp_margin else 0
+        at_bottom: int = 1 if self.y > self.map_height - tmp_margin else 0
 
         low_energy: int = 1 if self.act_energy < self.max_energy // 2 else 0
 
@@ -207,7 +208,6 @@ class Deer(Entity):
     def restart(self) -> None:
         self.alive = True
         self.health = self.max_health
-        self.pos = pygame.Vector2(self.x, self.y)
         self.hunger = 0
         self.pos.x = random.randint(10, self.map_width - 10)
         self.pos.y = random.randint(10, self.map_height - 10)

@@ -11,10 +11,13 @@ from entity import Entity
 class Azu(Entity):
     _base_image = None
     knowledge = {}
+
     INF = float("inf")
+    MIN_ATTACK_ENERGY: int = 7
 
     def __init__(self, name: str, x_pos: int, y_pos: int,
-                 map_dimension: tuple[int, int], num_grids: int) -> None:
+                 map_dimension: tuple[int, int], num_grids: int,
+                 genome: dict) -> None:
         # Agent Brain
         self.type: str = "Azu"
         self.actions = ["UP", "DOWN", "LEFT", "RIGHT", "IDLE", "ATTACK"]
@@ -26,6 +29,12 @@ class Azu(Entity):
 
         # Rewards
         self.reward: int = 0
+        # ~ Reward Values
+        self.genome: dict = genome
+
+        # Fitness vars
+        self.deer_attacks = 0
+        self.ticks_lived = 0
 
         # Visited Cells
         self.visited_cells = [0 for _ in range(
@@ -36,14 +45,14 @@ class Azu(Entity):
         self.act_adrenaline: int = self.max_adrenaline
 
         # Miscellaneous
-        self.hunger: int = random.randint(0, 30)
+        self.hunger: int = random.randint(0, 10)
 
         # Prey
         # ...................................... #
         self.closest_deer: object = None
         self.target_dir: int = 0
 
-        # Binary, 0 or 1 to feed it to the state function
+        # ~ Binary, 0 or 1 to feed it to the state function
         self.is_deer_in_range: int = 0
         # ...................................... #
 
@@ -56,6 +65,8 @@ class Azu(Entity):
 
         # Explore
         self.closest_unknown: int = 0
+        self.sight_range: int = random.randint(90, 150)
+        self.cell_radius: int = 3
 
         # Load base image
         if Azu._base_image is None:
@@ -64,7 +75,7 @@ class Azu(Entity):
             pygame.draw.circle(Azu._base_image, (39, 200, 245),
                                (self.radius, self.radius), self.radius)
 
-    def update(self, ui: object, dt: float, screen: pygame.Surface) -> None:
+    def update(self, ui: object, dt: float) -> None:
         new_cell = ui.get_cell_at_pos(self.pos)
 
         # Set Reward to 0
@@ -73,13 +84,15 @@ class Azu(Entity):
         # Entity die
         if self.health <= 0:
             self.die(self, ui)
-            self.reward -= 20
+            self.reward += self.genome["w_dead"]
             if self.last_state is not None:
                 terminal_state: tuple[str, ...] = tuple(
                     "DEAD" for _ in range(len(self.actions)))
                 self.brain.learn(
                     self.last_state, self.last_action, self.reward, terminal_state)
             return
+        else:
+            self.ticks_lived += 1
 
         # Change cell
         if new_cell != self.current_cell:
@@ -94,15 +107,15 @@ class Azu(Entity):
 
         # Energy management
         self._balance_hunger(dt)
-        self.can_attack = 1 if self.act_energy >= 10 else 0
+        self.can_attack = 1 if self.act_energy >= Azu.MIN_ATTACK_ENERGY else 0
 
         # Brain decision
-        neighbors = ui.get_neighbors(self, self.current_cell, self.radius)
+        neighbors = ui.get_neighbors(self, self.current_cell, self.cell_radius)
         current_state = self._get_state(neighbors)
         action_idx = self.brain.choose_action(current_state)
 
         # Distance to prey
-        init_dist_deer = init_dist_monster = float('inf')
+        init_dist_deer = init_dist_monster = Azu.INF
         if self.closest_deer:
             init_dist_deer = self.pos.distance_to(self.closest_deer.pos)
         else:
@@ -137,8 +150,14 @@ class Azu(Entity):
         # (avrg - cell_value) / 2) + 1 / 2, 5), -0.2)
 
         # Formula did work
-        cell_max = max(min(-0.2 * (cell_value - avrg)**3 + 1, 5), -1)
-        self.reward += cell_max
+        k_slope = self.genome['w_expl_slope']
+        offset = self.genome['w_expl_offset']
+
+        cell_rw = max(min(k_slope * (cell_value - avrg)**3 +
+                          offset, self.genome['w_bttm_expl']),
+                      self.genome['w_top_expl'])
+
+        self.reward += cell_rw
 
     def get_unexplored(self) -> int:
         """
@@ -180,29 +199,30 @@ class Azu(Entity):
                      init_dist_monster: float, init_dist_deer: float) -> None:
         # ------------------------------------------------------------------ #
         # Alive reward (avoid depression)
-        self.reward += 0.1
+        self.reward += self.genome['w_alive']
 
         # Action penalty
         if action_idx < 4:
-            self.reward -= 0.05
+            self.reward += self.genome['w_energy_action']
         elif action_idx == 5 and self.can_attack == 1:  # Attack
-            self.reward -= 1
+            self.reward += self.genome['w_energy_attack']
 
             # Attack successful reward
             if self.is_deer_in_range == 1:
-                self.reward += 11
+                self.reward += self.genome['w_deer_attack']
+                self.hunger = max(min(self.hunger - self.damage, 50), 0)
 
         # Hunger penalty
         if self.hunger >= 50:
-            self.reward -= 0.05
+            self.reward += self.genome['w_high_hunger']
 
         # Energy penalty
         if self.act_energy <= 0:
-            self.reward -= 1
+            self.reward += self.genome['w_low_energy']
 
         # Health penalty
         if self.health <= self.max_health // 2:
-            self.reward -= 0.1
+            self.reward += self.genome['w_low_health']
 
         # ENTITY BASED REWARDS
         # - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -221,15 +241,13 @@ class Azu(Entity):
 
             # Closer to deer reward
             if act_dist_deer < init_dist_deer:
-                self.reward += 1.5
+                self.reward += self.genome['w_closer_deer']
             else:
-                self.reward -= 0.5
+                self.reward += self.genome['w_farther_deer']
 
             # Face-to-face deer reward
-            if act_dist_deer <= 15:
-                self.reward += 5
-                self.hunger -= dt * 2
-                self.hunger = max(self.hunger, 0)
+            if act_dist_deer <= 10:
+                self.reward += self.genome['w_deer_close']
 
                 self.is_deer_in_range = 1
             else:
@@ -249,9 +267,9 @@ class Azu(Entity):
             # Closer to monster penalty
             act_dist_monster = self.pos.distance_to(self.closest_monster.pos)
             if act_dist_monster > init_dist_monster:
-                self.reward += 0.5
+                self.reward += self.genome['w_farther_monst']
             else:
-                self.reward -= 2
+                self.reward += self.genome['w_closer_monst']
 
         # - - - - - - - - - - - - - - - - - - - - - - - - -
         # ------------------------------------------------------------------ #
@@ -286,9 +304,10 @@ class Azu(Entity):
         # Attack
         elif action_idx == 5:
             if self.can_attack == 1:
-                self.act_energy -= 10 * dt
+                self.act_energy -= Azu.MIN_ATTACK_ENERGY * dt
                 if self.is_deer_in_range == 1:
                     self.closest_deer.receive_dmg(self.damage, dt)
+                    self.deer_attacks += 1
 
         if direction.length_squared() > 0:
             direction = direction.normalize()
@@ -315,9 +334,6 @@ class Azu(Entity):
     def set_hunger(self, hunger: int) -> None:
         self.hunger = hunger
 
-    def reset_deer_dmg(self) -> None:
-        self.deer_damage = 0
-
     # Getters
     def get_reward(self) -> None:
         return self.reward
@@ -332,19 +348,20 @@ class Azu(Entity):
         self.closest_deer = self._check_for_entities("Deer", neighbors)[0]
         deer_near: int = 1 if self.closest_deer is not None else 0
 
-        at_right: int = 1 if self.x > self.map_width - 5 else 0
-        at_left: int = 1 if self.x < 5 else 0
-        at_top: int = 1 if self.y < 5 else 0
-        at_bottom: int = 1 if self.y > self.map_height - 5 else 0
+        at_right: int = 1 if self.x > self.map_width - 7 else 0
+        at_left: int = 1 if self.x < 7 else 0
+        at_top: int = 1 if self.y < 7 else 0
+        at_bottom: int = 1 if self.y > self.map_height - 7 else 0
 
         low_energy: int = 1 if self.act_energy < self.max_energy // 2 else 0
-        # low_health: int = 1 if self.health > self.max_health // 2 else 0
+        low_health: int = 1 if self.health > self.max_health // 2 else 0
 
         hunger_status: int = 1 if self.hunger > 50 else 0
 
         return (monster_near, deer_near, hunger_status, at_right, at_left,
-                at_bottom, at_top, low_energy, self.target_dir, self.monster_dir,
-                self.is_deer_in_range, self.can_attack, self.closest_unknown)
+                at_bottom, at_top, low_energy, low_health, self.target_dir,
+                self.monster_dir, self.is_deer_in_range, self.can_attack,
+                self.closest_unknown)
 
     # Events
 
@@ -356,16 +373,21 @@ class Azu(Entity):
                 self.health += dt
                 self.health = min(self.health, self.max_health)
             else:
-                self.hunger += dt * 0.3
+                self.hunger += dt / 8
         else:
             self.hunger = max(self.hunger, 100)
-            self.health -= dt
+            self.health -= dt / 10
 
     def restart(self) -> None:
         self.alive = True
         self.health = self.max_health
         self.pos = pygame.Vector2(self.x, self.y)
         self.hunger = 0
+
+        self.deer_attacks = 0
+        self.ticks_lived = 0
+        self.visited_cells = [0 for _ in range(
+            self.map_grids * self.map_grids)]
 
     def get_info(self) -> str:
         return f"""
@@ -404,3 +426,27 @@ class Azu(Entity):
             else:
                 print(f"{val:^4}", end="")
         print()
+
+    def get_fitness(self) -> tuple[int, int]:
+        """
+        Function used to return fitness in order to
+        optimize the rewards.
+        """
+
+        c_vis = sum(cell > 0 for cell in self.visited_cells)
+        w_map = 5.0
+
+        d_kill = self.deer_attacks
+        w_food = 50.0
+
+        t_surv = self.ticks_lived
+        w_alive = 0.2
+
+        w_still_alive = 0
+        if self.alive:
+            w_still_alive = 1000
+
+        fitness = (c_vis * w_map) + (d_kill * w_food) + \
+            (t_surv * w_alive) + w_still_alive
+
+        return fitness, t_surv

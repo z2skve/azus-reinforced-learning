@@ -23,20 +23,29 @@ class Cell:
         return self.pos
 
 
-class UI:
-    def __init__(self, title: str, bg_color: tuple[int, int, int], width: int = 1000, height: int = 1000, num_grids: int = 20) -> None:
+class Ui:
+    def __init__(
+            self, title: str, bg_color: tuple[int, int, int],
+            width: int = 1000, height: int = 1000, num_grids: int = 20,
+            visual: bool = False) -> None:
+
         pygame.init()
+
         self.bg_color: tuple[int, int, int] = bg_color
         self.width: int = width
         self.height: int = height
         self.num_grids: int = num_grids
 
-        self.title: str = title
+        pygame.display.set_caption(title)
 
-        self._set_window_size()
-        self._calc_grid_pixel_size()
         self._create_cells()
-        self._set_title()
+        self._calc_grid_pixel_size()
+
+        if visual:
+            self._set_window()
+
+    def set_visual(self, visual: bool) -> None:
+        self._set_window(visual)
 
     def clear(self) -> None:
         self.screen.fill(self.bg_color)
@@ -51,12 +60,13 @@ class UI:
     def get_cells(self) -> tuple[Cell, ...]:
         return self.cells
 
-    def _set_title(self) -> None:
-        pygame.display.set_caption(self.title)
-
-    def _set_window_size(self) -> None:
-        self.screen: pygame.Surface = pygame.display.set_mode(
-            (self.width, self.height))
+    def _set_window(self, show: bool) -> None:
+        if show:
+            self.screen: pygame.Surface = pygame.display.set_mode(
+                (self.width, self.height))
+        else:
+            self.screen: pygame.Surface = pygame.display.set_mode(
+                (self.width, self.height), pygame.HIDDEN)
 
     def _calc_grid_pixel_size(self):
         self.grid_size_x: int = self.width // self.num_grids
