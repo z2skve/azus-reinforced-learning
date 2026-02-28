@@ -34,11 +34,11 @@ Where:
 ## Evolutionary Strategy
 To optimize the reward signals and agent behavior, a Genetic Algorithm (GA) framework has been integrated.
 
-- Selection & Elitism: The system employs an elitist strategy, ensuring that the top two individuals from each generation are preserved unchanged. The remaining population is generated through the crossover of the Top-N performing entities.
+- Selection & Elitism: The system employs an elitist strategy, ensuring that the top individuals from each generation are preserved unchanged. The remaining population is generated through the crossover of the Top-N performing entities and new non-crossed individuals.
 
 - Stochastic Noise Mitigation: To account for environmental randomness (spawn point luck), fitness is not calculated from a single run. Instead, each genome is evaluated across three independent trials. The final fitness score is the arithmetic mean of these trials.
 
-- Generational Epsilon Reset: To balance exploration and exploitation within each evolutionary step, the Epsilon parameter (ϵ) restarts at 30% at the beginning of each generation, decaying towards a minimum value as agents gain experience in their specific epoch.
+- Generational Epsilon Reset: To balance exploration and exploitation within each evolutionary step, the Epsilon parameter (ϵ) restarts at the beginning of each evaluated generation, decaying towards a minimum value as agents gain experience in their specific epoch.
 
 ## Telemetry and Performance Monitoring
 
@@ -47,11 +47,11 @@ A telemetry system has been implemented to track the evolutionary progress.
 >It also displays a cumulative learning slope using the least-squares method in order to identify whether the population is evolving toward higher efficiency or hitting a performance plateau.
 
 <p align="center">
-<img src="pictures/cap2.png" width="48%" />
 <img src="pictures/cap3.png" width="48%" />
+<img src="pictures/cap4.png" width="48%" />
 </p>
 <p align="center">
-<img src="pictures/cap4.png" width="48%" />
+<img src="pictures/cap6.png" width="48%" />
 </p>
 
 ## Exploration Feature
@@ -88,10 +88,11 @@ Where:
 ## Project Structure
 ```
 azus-reinforced-learning/
-├── azus-brain/          # Saved Q-tables and training data
-├── pictures/            # Visualization assets
-│   └── ReinforcedLearning.jpg
-└── src/       # Python implementation
+├── azus-brain/              # Saved Q-tables and training data
+├── pictures/                # Visualization assets
+├── src/                     # Python implementation
+├── genetic-algorithm/       # Saves GAs parameters
+└── markdown/                # Explanation files
 ```
 
 ## Code Style
@@ -108,12 +109,10 @@ The goal was to learn not just reinforcement learning concepts, but also best pr
 ## Current Status
 
 This project is **not finished** and serves primarily as a learning exercise. It was created to:
-- Understand the fundamentals of reinforcement learning
+- Understand the fundamentals of reinforcement learning and Genetic Algorithms
 - Practice Q-Learning implementation
 - Develop clean, readable, and maintainable code
-- Explore emergent behavior in multi-agent systems
-
-I'm currently focusing on other projects, as this has fulfilled its educational purpose for now.
+- Exploring an optimization system capable of solving metaheuristic problems.
 
 ---
 <p align="center">

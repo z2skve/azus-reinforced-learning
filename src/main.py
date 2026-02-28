@@ -41,6 +41,8 @@ from agent import QLearningBrain
 from datagraph import DataGraph
 from optimizer import GeneticOptimizer
 
+import time  # Debugging
+
 
 def get_avrg_stat(azus: list[object, ...]) -> float:
     """
@@ -60,7 +62,6 @@ def check_dir_exist() -> None:
 
 
 def get_entities(
-        azu_master_brain, deer_master_brain, monster_master_brain,
         width: int, height: int, num_grids: int, genomes: dict) -> tuple:
     """
     Args:
@@ -88,9 +89,9 @@ def get_entities(
             y_pos=random.randint(10, height - 10),
             map_dimension=(width, height),
             num_grids=num_grids,
+            brain=QLearningBrain(actions=[0, 1, 2, 3, 4, 5]),
             genome=g
         )
-        new_azu.brain = azu_master_brain
         azus.append(new_azu)
 
     deers:    list[Deer, ...] = [
@@ -103,7 +104,7 @@ def get_entities(
         for i in range(30)]
 
     for deer in deers:
-        deer.brain = deer_master_brain
+        deer.brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
 
     monsters: list[Monster, ...] = [
         Monster(f"{i}", random.randint(10, width - 10),
@@ -111,7 +112,7 @@ def get_entities(
         for i in range(1)]
 
     for monster in monsters:
-        monster.brain = monster_master_brain
+        monster.brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
 
     return azus, deers, monsters
     # ------------------------------------------------------------- #
@@ -163,24 +164,11 @@ def main() -> None:
     # UI Constants
     # ~ Defines how many generations should happen
     # ~ before showing the results
-    RENDER_EVERY: int = 30
-
-    # Entities Knowledge
-    # -------------------------------------------------------------- #
-    azu_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4, 5])
-    azu_master_brain.load_from_disk(r"azus-brain/azu_knowledge.json")
-
-    deer_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
-    deer_master_brain.load_from_disk(r"azus-brain/deer_knowledge.json")
-
-    monster_master_brain = QLearningBrain(actions=[0, 1, 2, 3, 4])
-    monster_master_brain.load_from_disk(r"azus-brain/monster_knowledge.json")
-    # -------------------------------------------------------------- #
+    RENDER_EVERY: int = 500
 
     # Create entities list
-    azus, deers, monsters = get_entities(
-        azu_master_brain, deer_master_brain, monster_master_brain, width,
-        height, num_grids, populat_genomes)
+    azus, deers, monsters = get_entities(width, height, num_grids,
+                                         populat_genomes)
 
     entities: list[object, [...]] = [*azus, *deers, *monsters]
     # ------------------------------------------------------------- #
@@ -207,6 +195,7 @@ def main() -> None:
         steps: int = 0
 
         while running:
+            # tiempo_act = time.time()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -219,17 +208,23 @@ def main() -> None:
                 raise ValueError("W_EPSILON must be between 0 and 1")
 
             # Reduce Random Learning each Frame
-            if azu_master_brain.epsilon > azu_master_brain.epsilon_min:
-                azu_master_brain.epsilon *= W_EPSILON
+            for azu in azus:
+                if azu.brain.epsilon > azu.brain.epsilon_min:
+                    azu.brain.epsilon *= W_EPSILON
 
-            if deer_master_brain.epsilon > deer_master_brain.epsilon_min:
-                deer_master_brain.epsilon *= W_EPSILON
+            for deer in deers:
+                if deer.brain.epsilon > deer.brain.epsilon_min:
+                    deer.brain.epsilon *= W_EPSILON
 
-            if monster_master_brain.epsilon > monster_master_brain.epsilon_min:
-                monster_master_brain.epsilon *= W_EPSILON
+            for monster in monsters:
+                if monster.brain.epsilon > monster.brain.epsilon_min:
+                    monster.brain.epsilon *= W_EPSILON
 
             azus_alive = any(isinstance(obj, Azu) for obj in entities)
             deers_alive = sum(isinstance(obj, Deer) for obj in entities)
+
+            # var1 = (time.time() - tiempo_act)
+            # tiempo_act = time.time()
 
             if steps - last_graph_refresh >= STEPS_PER_GEN or not azus_alive:
 
@@ -249,10 +244,20 @@ def main() -> None:
                 if attmpt_num == 1:
                     rated_genomes = []
 
+                    for azu in azus:
+                        azu.brain.epsilon = 1
+
+                    for deer in deers:
+                        deer.brain.epsilon = 1
+
+                    for monster in monsters:
+                        monster.brain.epsilon = 1
+
                 azus_times = []
                 for i, azu in enumerate(azus):
                     score, azu_time = azu.get_fitness()
                     if attmpt_num == 1:
+
                         rated_genomes.append([score, azu.genome])
                     else:
                         rated_genomes[i][0] += score
@@ -279,16 +284,15 @@ def main() -> None:
                 # Print for debugging
                 # print(azu_master_brain.epsilon)
 
-                azu_master_brain.epsilon = 0.3
-                deer_master_brain.epsilon = 0.3
-                monster_master_brain.epsilon = 0.3
-
                 # Telemetry
                 ticks_mon.update(gen_number, best_time)
                 hunted_deer_mon.update(gen_number, hunted_deer)
 
                 last_graph_refresh = steps
                 hunted_deer = 0
+
+            # var2 = (time.time() - tiempo_act)
+            # tiempo_act = time.time()
 
             if deers_alive <= 29:
                 hunted_deer += 1
@@ -298,6 +302,8 @@ def main() -> None:
                     if not deer.alive:
                         deer.restart()
 
+            # var3 = (time.time() - tiempo_act)
+            # tiempo_act = time.time()
             # Debugging var
             debug = 0
 
@@ -309,6 +315,9 @@ def main() -> None:
                 # Only for debugging
                 if debug == -1:  # Off for now
                     print(obj.get_info())
+
+            # var4 = (time.time() - tiempo_act)
+            # tiempo_act = time.time()
 
             # Clear dead entities
             entities = [obj for obj in entities if obj.alive]
@@ -324,15 +333,16 @@ def main() -> None:
 
             steps += 1
 
+            # var5 = (time.time() - tiempo_act)
+
+            # print(var1, var2, var3, var4, var5)
+            # tiempo_act = time.time()
+
     except Exception:
         traceback.print_exc()
         exit(0)
     # End pygame
     finally:
-        azu_master_brain.save_to_disk(r"azus-brain/azu_knowledge.json")
-        deer_master_brain.save_to_disk(r"azus-brain/deer_knowledge.json")
-        monster_master_brain.save_to_disk(r"azus-brain/monster_knowledge.json")
-
         # Telemetry
         hunted_deer_mon.close()
         ticks_mon.close()

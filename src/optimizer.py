@@ -7,11 +7,6 @@ class GeneticOptimizer:
         self.pop_size = pop_size
         self.last_best_score = None
 
-        if self.last_best_score is not None:
-            change = abs(current_best_score - self.last_best_score) / \
-                (self.last_best_score + 1e-6)
-            if change > 0.5:  # Umbral de anomalía
-                is_anomaly = True
         self.gene_bounds = {
             "w_dead": (-100, -10),
             "w_alive": (0.0, 1.0),
@@ -32,6 +27,11 @@ class GeneticOptimizer:
             "w_farther_monst": (0.1, 0.8),
         }
 
+    def _generate_random_genome(self) -> dict:
+        """Crea un único genoma aleatorio basado en los límites definidos."""
+        return {name: random.uniform(b[0], b[1])
+                for name, b in self.gene_bounds.items()}
+
     def create_init_gen(self) -> None:
         """
         Creates initial genes for generation 0.
@@ -42,23 +42,37 @@ class GeneticOptimizer:
 
     def evolve(self, rated_genomes):
         rated_genomes.sort(key=lambda x: x[0], reverse=True)
+
+        new_population = []
+        num_inherited = int(self.pop_size * 0.8)
+        top_half_pool = [g[1] for g in rated_genomes[:len(rated_genomes)//2]]
+
         new_population = [rated_genomes[0][1], rated_genomes[1][1]]
 
-        while len(new_population) < self.pop_size:
-            p1, p2 = random.sample([g[1] for g in rated_genomes[:8]], 2)
+        while len(new_population) < num_inherited:
+            p1, p2 = random.sample(top_half_pool, 2)
             child = self._crossover(p1, p2)
             child = self._mutate(child)
             new_population.append(child)
 
+        while len(new_population) < self.pop_size:
+            new_population.append(self._generate_random_genome())
+
         return new_population
 
     def _crossover(self, p1: dict, p2: dict):
-        return {k: (p1[k] if random.random() > 0.5 else p2[k]) for k in p1}
+        # return {k: (p1[k] if random.random() > 0.5 else p2[k]) for k in p1}
+        alpha = random.random()
+
+        return {
+            k: (alpha * p1[k] + (1 - alpha) * p2[k])
+            for k in p1
+        }
 
     def _mutate(self, genome: dict):
         for k in genome:
             if random.random() < 0.1:  # Mutation chance
-                genome[k] += random.uniform(-0.1, 0.1)
+                genome[k] += random.uniform(-0.3, 0.3)
         return genome
 
     def save_checkpoint(self, population: list[dict, ...], gen_number: int,

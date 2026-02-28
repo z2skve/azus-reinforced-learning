@@ -10,22 +10,21 @@ from entity import Entity
 
 class Azu(Entity):
     _base_image = None
-    knowledge = {}
 
     INF = float("inf")
     MIN_ATTACK_ENERGY: int = 7
 
     def __init__(self, name: str, x_pos: int, y_pos: int,
                  map_dimension: tuple[int, int], num_grids: int,
-                 genome: dict) -> None:
+                 brain: object, genome: dict) -> None:
         # Agent Brain
         self.type: str = "Azu"
         self.actions = ["UP", "DOWN", "LEFT", "RIGHT", "IDLE", "ATTACK"]
         super().__init__(name, x_pos, y_pos,
                          map_dimension, num_grids, self.type, self.actions)
 
-        # Knowledge
-        self.brain.q_table: dict = Azu.knowledge
+        # Brain
+        self.brain: object = brain
 
         # Rewards
         self.reward: int = 0
@@ -46,6 +45,7 @@ class Azu(Entity):
 
         # Miscellaneous
         self.hunger: int = random.randint(0, 10)
+        self.last_check: int = 0
 
         # Prey
         # ...................................... #
@@ -341,11 +341,16 @@ class Azu(Entity):
     def _get_state(self, neighbors: tuple) -> tuple:
         """Converts environment data into a discrete state."""
 
-        self.closest_monster = self._check_for_entities(
-            "Monster", neighbors)[0]
+        self.last_check += 1
+        if self.last_check == 2:
+            self.last_check = 0
+
+            self.closest_monster = self._check_for_entities(
+                "Monster", neighbors)[0]
+            self.closest_deer = self._check_for_entities("Deer", neighbors)[0]
+
         monster_near: int = 1 if self.closest_monster is not None else 0
 
-        self.closest_deer = self._check_for_entities("Deer", neighbors)[0]
         deer_near: int = 1 if self.closest_deer is not None else 0
 
         at_right: int = 1 if self.x > self.map_width - 7 else 0
@@ -354,7 +359,7 @@ class Azu(Entity):
         at_bottom: int = 1 if self.y > self.map_height - 7 else 0
 
         low_energy: int = 1 if self.act_energy < self.max_energy // 2 else 0
-        low_health: int = 1 if self.health > self.max_health // 2 else 0
+        low_health: int = 1 if self.health < self.max_health // 2 else 0
 
         hunger_status: int = 1 if self.hunger > 50 else 0
 
@@ -375,7 +380,7 @@ class Azu(Entity):
             else:
                 self.hunger += dt / 8
         else:
-            self.hunger = max(self.hunger, 100)
+            self.hunger = min(self.hunger, 100)
             self.health -= dt / 10
 
     def restart(self) -> None:
